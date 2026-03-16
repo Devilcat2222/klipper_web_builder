@@ -125,38 +125,75 @@ function onLoad() {
     } else if ('configs' in msg) {
       console.log(JSON.stringify(msg.configs, null, 2));
       const select_configs = document.getElementById("select_configs");
-      const currentVal = select_configs.value;
+      const currentVal = ('current_config' in msg) ? msg.current_config : select_configs.value;
       select_configs.innerHTML = '<option value=".config">Klipper current</option>';
       for (const it in msg.configs) {
         const item = msg.configs[it];
         select_configs.innerHTML += `<option value="${item}">${item}</option>`;
       }
-      if (currentVal) select_configs.value = currentVal;
-      else select_configs.value = '.config';
+      select_configs.value = (currentVal && msg.configs.includes(currentVal)) ? currentVal : '.config';
       select_configs.disabled = false;
+      updateDeleteButtonState();
     } else if ('file' in msg) {
       fileName = msg.file;
-      btn = document.getElementById("downloadButton")
-      btn.removeAttribute("hidden")
+      document.getElementById("downloadButton").removeAttribute("hidden");
+      setBuildStatus('Done');
     } else {
-      console.log('process message');
       const logs = document.getElementById("compile_logs");
-      logs.innerHTML += msg.text + '<br>';
+      logs.textContent += msg.text || '';
       logs.scrollTop = logs.scrollHeight;
+      if (msg.text && msg.text.includes('process finished')) {
+        if (!document.getElementById("downloadButton").hidden) setBuildStatus('Done');
+        else setBuildStatus('Finished');
+      }
     }
   }
 }
 function configChanged(item) {
   console.log("config changed", item.value);
   websocket.send(`kconf:${item.value}`);
+  updateDeleteButtonState();
 }
-function saveConfigToKconfigs() {
-  const name = document.getElementById("save_config_name").value.trim();
+function updateDeleteButtonState() {
+  const sel = document.getElementById("select_configs");
+  const btn = document.getElementById("delete_config_btn");
+  btn.disabled = !sel.value || sel.value === '.config';
+}
+var saveMode = false;
+function toggleSaveMode() {
+  const sel = document.getElementById("select_configs");
+  const inp = document.getElementById("save_config_input");
+  const btn = document.getElementById("save_btn");
+  if (!saveMode) {
+    sel.style.display = 'none';
+    inp.style.display = 'block';
+    inp.value = '';
+    inp.focus();
+    btn.textContent = 'Save';
+    btn.onclick = doSave;
+    saveMode = true;
+  } else {
+    sel.style.display = 'inline-block';
+    inp.style.display = 'none';
+    btn.textContent = 'Save As';
+    btn.onclick = toggleSaveMode;
+    saveMode = false;
+  }
+}
+function doSave() {
+  const name = document.getElementById("save_config_input").value.trim();
   if (!name) {
     alert("Enter config filename");
     return;
   }
   websocket.send(`save_config:${name}`);
+  toggleSaveMode();
+}
+function deleteConfig() {
+  const sel = document.getElementById("select_configs");
+  if (!sel.value || sel.value === '.config') return;
+  if (!confirm(`Delete config "${sel.value}"?`)) return;
+  websocket.send(`delete_config:${sel.value}`);
 }
 function onChanged(item) {
   if (!item.name) {
@@ -204,8 +241,11 @@ function onChanged(item) {
 function formSubmit(cmd, button) {
   console.log('submit form');
   websocket.send(cmd);
-  btn = document.getElementById("downloadButton");
-  btn.hidden = true;
+  document.getElementById("downloadButton").hidden = true;
+  setBuildStatus(cmd === 'clean' ? 'Cleaning...' : 'Building...');
+}
+function setBuildStatus(text) {
+  document.getElementById("build_status").textContent = text || '';
 }
 function downloadFile() {
   console.log(fileName);
@@ -229,24 +269,41 @@ function downloadFile() {
 </div>
 <div class="form-check pb-4">
   <label class="my-1 mr-2" for="select_configs">Firmware config file</label>
-  <select class="form-select" id="select_configs" name="option" onchange="configChanged(this)" disabled>
-    <option value=".config" selected>Klipper current</option>
-  </select>
   <div class="input-group mt-2">
-    <input type="text" class="form-control" id="save_config_name" placeholder="Save as (e.g. my-board.config)">
-    <button type="button" class="btn btn-outline-secondary" onclick="saveConfigToKconfigs()">Save to ~/klipper-kconfigs</button>
+    <input type="text" class="form-control" id="save_config_input" placeholder="Filename (e.g. my-board.config)" style="display:none;" onkeydown="if(event.key==='Enter')doSave();if(event.key==='Escape')toggleSaveMode();">
+    <select class="form-select" id="select_configs" name="option" onchange="configChanged(this)" disabled>
+      <option value=".config" selected>Klipper current</option>
+    </select>
+    <button type="button" class="btn btn-outline-secondary" id="save_btn" onclick="toggleSaveMode()" style="white-space:nowrap">Save As</button>
+    <button type="button" class="btn btn-outline-danger" id="delete_config_btn" onclick="deleteConfig()" disabled title="Delete selected config from ~/klipper-kconfigs" style="white-space:nowrap">Delete config</button>
   </div>
 </div>
 <div id="dynamic">
 </div>
 <br>
 <div class="form-group">
+<div class="d-flex flex-wrap gap-2">
 <button type="button" class="btn btn-primary" onclick="formSubmit('submit')">Make</button>
 <button type="button" class="btn btn-warning" onclick="formSubmit('clean')">Clean</button>
 <button id="downloadButton" type="button" class="btn btn-success" onclick="downloadFile()" hidden>Download</button>
+<button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal">Logs</button>
 </div>
-<div id="compile_logs" style="font-family:monospace; overflow-y:scroll; width:100%; height:600px" class="container-fluid">
+<div id="build_status" class="mt-2 text-muted small"></div>
 </div>
+</div>
+
+<div class="modal fade" id="logsModal" tabindex="-1" aria-labelledby="logsModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="logsModalLabel">Build logs</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-0">
+        <pre id="compile_logs" class="m-0 p-3 bg-dark text-light" style="font-family:monospace; font-size:12px; max-height:70vh; overflow-y:auto; white-space:pre-wrap; word-break:break-all;"></pre>
+      </div>
+    </div>
+  </div>
 </div>
 </body>
 </html>

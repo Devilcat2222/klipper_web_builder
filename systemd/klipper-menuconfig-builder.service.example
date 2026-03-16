@@ -11,6 +11,7 @@ WantedBy=multi-user.target
 
 [Service]
 Type=simple
+TimeoutStopSec=5
 User=YOUR_USER
 WorkingDirectory=/home/YOUR_USER/klipper_web_builder
 ExecStart=/home/YOUR_USER/klipper-menuconfig-builder-env/bin/python /home/YOUR_USER/klipper_web_builder/server.py -k /home/YOUR_USER/klipper -l /home/YOUR_USER/printer_data/logs/menuconfig.log -c /home/YOUR_USER/klipper-kconfigs

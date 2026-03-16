@@ -71,6 +71,7 @@ WantedBy=multi-user.target
 
 [Service]
 Type=simple
+TimeoutStopSec=5
 User=${CURRENT_USER}
 WorkingDirectory=${MENUCONFIG_DIR}
 ExecStart=${MENUCONFIG_ENV}/bin/python ${MENUCONFIG_DIR}/server.py -k ${KLIPPER_DIR} -l ${MENUCONFIG_LOG} -c ${HOME}/klipper-kconfigs
