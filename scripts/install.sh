@@ -73,7 +73,7 @@ WantedBy=multi-user.target
 Type=simple
 User=${CURRENT_USER}
 WorkingDirectory=${MENUCONFIG_DIR}
-ExecStart=${MENUCONFIG_ENV}/bin/python ${MENUCONFIG_DIR}/server.py -k ${KLIPPER_DIR} -l ${MENUCONFIG_LOG}
+ExecStart=${MENUCONFIG_ENV}/bin/python ${MENUCONFIG_DIR}/server.py -k ${KLIPPER_DIR} -l ${MENUCONFIG_LOG} -c ${HOME}/klipper-kconfigs
 Restart=always
 RestartSec=5
 EOF

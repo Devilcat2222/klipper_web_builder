@@ -1,5 +1,4 @@
 #!/usr/bin/python3 -u
-#!/usr/bin/python3 -u
 # -*- coding: utf-8 -*-
 
 from aiohttp import web, WSMsgType
@@ -158,6 +157,33 @@ async def handle_ws(request):
       kconf = request.app['kconf']
 
       if msg.data == 'init':
+        configs = get_kconfigs_list(request.app['kconfigs_dir'])
+        await ws.send_str(json.dumps({'configs': configs}))
+        pass
+
+      elif msg.data.startswith('kconf:'):
+        filename = msg.data[6:].strip()
+        kconfigs_dir = request.app['kconfigs_dir']
+        if filename == '.config' or not filename:
+          config_filename = request.app['default_config']
+        else:
+          config_filename = os.path.join(kconfigs_dir, filename)
+        request.app['config_filename'] = config_filename
+        if os.path.exists(config_filename):
+          try:
+            request.app['kconf'].load_config(config_filename)
+          except EnvironmentError as e:
+            logger.warning(f'Failed to load config: {e}')
+        pass
+
+      elif msg.data.startswith('save_config:'):
+        filename = msg.data[11:].strip()
+        if filename and not os.path.basename(filename).startswith('.'):
+          dest = os.path.join(request.app['kconfigs_dir'], os.path.basename(filename))
+          request.app['kconf'].write_config(dest)
+          logger.info(f'Saved config to {dest}')
+          configs = get_kconfigs_list(request.app['kconfigs_dir'])
+          await ws.send_str(json.dumps({'configs': configs}))
         pass
 
       elif msg.data.startswith('{'):
@@ -208,7 +234,19 @@ async def handle_download(request: web.Request) -> web.StreamResponse:
     raise web.HTTPNotFound
 
 
-def run(klipper_folder, kconfig, port=7055):
+def get_kconfigs_list(kconfigs_dir):
+  configs = []
+  if os.path.exists(kconfigs_dir):
+    for f in sorted(os.listdir(kconfigs_dir)):
+      path = os.path.join(kconfigs_dir, f)
+      if os.path.isfile(path) and not f.startswith('.'):
+        configs.append(f)
+  return configs
+
+
+def run(klipper_folder, kconfig, port=7055, kconfigs_dir=None):
+  if kconfigs_dir is None:
+    kconfigs_dir = os.path.expanduser('~/klipper-kconfigs')
   app = web.Application()
   app.add_routes(
     [
@@ -233,6 +271,8 @@ def run(klipper_folder, kconfig, port=7055):
   app['kconf'] = kconf
   app['config_filename'] = config_filename
   app['klipper_folder'] = klipper_folder
+  app['kconfigs_dir'] = kconfigs_dir
+  app['default_config'] = config_filename
 
   web.run_app(app, port=port)
   logger.info('Stopping http server...\n')
@@ -261,12 +301,24 @@ if __name__ == '__main__':
       metavar="<port>",
       help="Location of server log file",
   )
+  parser.add_argument(
+      "-c",
+      "--kconfigsdir",
+      default="~/klipper-kconfigs",
+      metavar="<kconfigsdir>",
+      help="Directory with saved Kconfig files",
+  )
   system_args = parser.parse_args()
 
-  klipper_folder = system_args.klipperdir
+  klipper_folder = os.path.expanduser(system_args.klipperdir)
   if len(klipper_folder) == 0 or not os.path.exists(klipper_folder):
     logger.error('klipper folder not found!')
     exit()
+
+  kconfigs_dir = os.path.expanduser(system_args.kconfigsdir)
+  if not os.path.exists(kconfigs_dir):
+    os.makedirs(kconfigs_dir, exist_ok=True)
+    logger.info(f'Created kconfigs directory: {kconfigs_dir}')
 
   kconfig = os.path.join(klipper_folder, 'src/Kconfig')
   if not os.path.exists(kconfig):
@@ -284,6 +336,6 @@ if __name__ == '__main__':
   os.environ['srctree'] = klipper_folder
 
   try:
-    run(klipper_folder, kconfig, system_args.port)
+    run(klipper_folder, kconfig, system_args.port, kconfigs_dir)
   except KeyboardInterrupt:
     pass

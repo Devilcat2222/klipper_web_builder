@@ -125,11 +125,14 @@ function onLoad() {
     } else if ('configs' in msg) {
       console.log(JSON.stringify(msg.configs, null, 2));
       const select_configs = document.getElementById("select_configs");
-      select_configs.innerHTML = '<option value=".config" selected>Klipper current</option>';
+      const currentVal = select_configs.value;
+      select_configs.innerHTML = '<option value=".config">Klipper current</option>';
       for (const it in msg.configs) {
-        const item = msg.configs[it]
-        select_configs.innerHTML += `<option value="${item}">${item}</option>`
+        const item = msg.configs[it];
+        select_configs.innerHTML += `<option value="${item}">${item}</option>`;
       }
+      if (currentVal) select_configs.value = currentVal;
+      else select_configs.value = '.config';
       select_configs.disabled = false;
     } else if ('file' in msg) {
       fileName = msg.file;
@@ -146,6 +149,14 @@ function onLoad() {
 function configChanged(item) {
   console.log("config changed", item.value);
   websocket.send(`kconf:${item.value}`);
+}
+function saveConfigToKconfigs() {
+  const name = document.getElementById("save_config_name").value.trim();
+  if (!name) {
+    alert("Enter config filename");
+    return;
+  }
+  websocket.send(`save_config:${name}`);
 }
 function onChanged(item) {
   if (!item.name) {
@@ -219,8 +230,12 @@ function downloadFile() {
 <div class="form-check pb-4">
   <label class="my-1 mr-2" for="select_configs">Firmware config file</label>
   <select class="form-select" id="select_configs" name="option" onchange="configChanged(this)" disabled>
-    <option value="default" selected>Klipper current</option>
+    <option value=".config" selected>Klipper current</option>
   </select>
+  <div class="input-group mt-2">
+    <input type="text" class="form-control" id="save_config_name" placeholder="Save as (e.g. my-board.config)">
+    <button type="button" class="btn btn-outline-secondary" onclick="saveConfigToKconfigs()">Save to ~/klipper-kconfigs</button>
+  </div>
 </div>
 <div id="dynamic">
 </div>
