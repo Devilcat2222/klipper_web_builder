@@ -1,0 +1,47 @@
+name: Build Klipper for Ender 3 V3 SE C14
+
+on:
+  workflow_dispatch: # 手動でビルドボタンを押せるようにする設定
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Klipper
+        uses: actions/checkout@v4
+        with:
+          repository: 'Klipper3d/klipper'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi python3-kconfiglib
+
+      - name: Configure Firmware (C14 Settings)
+        run: |
+          mkdir -p .config
+          cat << EOF > .config
+          CONFIG_LOWLEVEL_OPTIONS=y
+          CONFIG_MACH_STM32=y
+          CONFIG_BOARD_DIRECTORY="stm32"
+          CONFIG_MCU="stm32f401"
+          CONFIG_XIP=y
+          CONFIG_STM32_SELECT=y
+          CONFIG_MACH_STM32F401=y
+          CONFIG_FLASH_BOOT_64KB=y
+          CONFIG_STM32_CLOCK_REF_8MHZ=y
+          CONFIG_STM32_SERIAL_PORT1=y
+          CONFIG_STM32_USART1_PA10_PA09=y
+          CONFIG_SERIAL=y
+          EOF
+
+      - name: Compile Firmware
+        run: |
+          make oldconfig
+          make
+
+      - name: Upload Firmware Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: klipper-c14-firmware
+          path: out/klipper.bin
